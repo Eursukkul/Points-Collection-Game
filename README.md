@@ -7,7 +7,7 @@ Gamification web app — ผู้เล่นกดสุ่มคะแนน 
 | Layer | Stack |
 |---|---|
 | Frontend | Next.js (App Router) + Tailwind CSS — `frontend/` |
-| Backend | Go + Gin + Gorm — `backend/` |
+| Backend | Go + fiber + Gorm — `backend/` |
 | Database | PostgreSQL |
 
 ## Getting Started

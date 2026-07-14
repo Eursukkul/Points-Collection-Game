@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"errors"
-	"net/http"
+	"time"
 
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -13,67 +13,64 @@ import (
 const (
 	cookieName   = "player_id"
 	ctxPlayerKey = "playerID"
-	cookieMaxAge = 60 * 60 * 24 * 365 // 1 year
+	cookieMaxAge = 365 * 24 * time.Hour
 )
 
 // EnsurePlayer identifies the player from an httpOnly cookie, bootstrapping a
 // new player (and setting the cookie) when the cookie is missing or invalid.
 // The player ID is server-generated only — a tampered cookie that doesn't match
 // an existing player row gets a fresh player instead.
-func EnsurePlayer(db *gorm.DB, secureCookie bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if raw, err := c.Cookie(cookieName); err == nil {
+func EnsurePlayer(db *gorm.DB, secureCookie bool) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if raw := c.Cookies(cookieName); raw != "" {
 			if id, parseErr := uuid.Parse(raw); parseErr == nil {
 				var player model.Player
 				err := db.Select("id").First(&player, "id = ?", id).Error
 				switch {
 				case err == nil:
-					c.Set(ctxPlayerKey, id)
-					c.Next()
-					return
+					c.Locals(ctxPlayerKey, id)
+					return c.Next()
 				case !errors.Is(err, gorm.ErrRecordNotFound):
-					abortInternal(c)
-					return
+					return internalError(c)
 				}
 			}
 		}
 
 		player := model.Player{}
 		if err := db.Create(&player).Error; err != nil {
-			abortInternal(c)
-			return
+			return internalError(c)
 		}
 		setPlayerCookie(c, player.ID, secureCookie)
-		c.Set(ctxPlayerKey, player.ID)
-		c.Next()
+		c.Locals(ctxPlayerKey, player.ID)
+		return c.Next()
 	}
 }
 
 // PlayerID returns the authenticated player's ID set by EnsurePlayer.
-func PlayerID(c *gin.Context) uuid.UUID {
-	return c.MustGet(ctxPlayerKey).(uuid.UUID)
+func PlayerID(c *fiber.Ctx) uuid.UUID {
+	return c.Locals(ctxPlayerKey).(uuid.UUID)
 }
 
-func setPlayerCookie(c *gin.Context, id uuid.UUID, secure bool) {
+func setPlayerCookie(c *fiber.Ctx, id uuid.UUID, secure bool) {
 	// Cross-site FE↔BE (Vercel↔Railway) needs SameSite=None which requires Secure.
 	// Local dev is same-site over http, so Lax without Secure.
-	sameSite := http.SameSiteLaxMode
+	sameSite := fiber.CookieSameSiteLaxMode
 	if secure {
-		sameSite = http.SameSiteNoneMode
+		sameSite = fiber.CookieSameSiteNoneMode
 	}
-	http.SetCookie(c.Writer, &http.Cookie{
+	c.Cookie(&fiber.Cookie{
 		Name:     cookieName,
 		Value:    id.String(),
 		Path:     "/",
-		MaxAge:   cookieMaxAge,
-		HttpOnly: true,
+		Expires:  time.Now().Add(cookieMaxAge),
+		HTTPOnly: true,
 		Secure:   secure,
 		SameSite: sameSite,
 	})
 }
 
-func abortInternal(c *gin.Context) {
-	c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-		"error": gin.H{"code": "INTERNAL", "message": "internal server error"},
+func internalError(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		"error": fiber.Map{"code": "INTERNAL", "message": "internal server error"},
 	})
 }

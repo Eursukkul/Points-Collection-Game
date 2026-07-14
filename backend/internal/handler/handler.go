@@ -4,11 +4,10 @@ package handler
 
 import (
 	"errors"
-	"net/http"
 
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/middleware"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/service"
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v2"
 )
 
 type Handler struct {
@@ -19,91 +18,85 @@ func New(svc *service.Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func (h *Handler) Register(api *gin.RouterGroup) {
-	api.GET("/me", h.getMe)
-	api.POST("/game/play", h.play)
-	api.POST("/claims", h.claim)
-	api.GET("/history/plays", h.playHistory)
-	api.GET("/history/claims", h.claimHistory)
-	api.POST("/reset", h.reset)
+func (h *Handler) Register(api fiber.Router) {
+	api.Get("/me", h.getMe)
+	api.Post("/game/play", h.play)
+	api.Post("/claims", h.claim)
+	api.Get("/history/plays", h.playHistory)
+	api.Get("/history/claims", h.claimHistory)
+	api.Post("/reset", h.reset)
 }
 
-func (h *Handler) getMe(c *gin.Context) {
+func (h *Handler) getMe(c *fiber.Ctx) error {
 	summary, err := h.svc.Summary(middleware.PlayerID(c))
 	if err != nil {
-		internalError(c)
-		return
+		return internalError(c)
 	}
-	c.JSON(http.StatusOK, summary)
+	return c.JSON(summary)
 }
 
-func (h *Handler) play(c *gin.Context) {
+func (h *Handler) play(c *fiber.Ctx) error {
 	result, err := h.svc.Play(middleware.PlayerID(c))
 	if err != nil {
-		internalError(c)
-		return
+		return internalError(c)
 	}
-	c.JSON(http.StatusOK, result)
+	return c.JSON(result)
 }
 
 type claimRequest struct {
-	Checkpoint int `json:"checkpoint" binding:"required"`
+	Checkpoint int `json:"checkpoint"`
 }
 
-func (h *Handler) claim(c *gin.Context) {
+func (h *Handler) claim(c *fiber.Ctx) error {
 	var req claimRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "INVALID_INPUT", "body must be {\"checkpoint\": <number>}")
-		return
+	if err := c.BodyParser(&req); err != nil || req.Checkpoint == 0 {
+		return respondError(c, fiber.StatusBadRequest, "INVALID_INPUT", `body must be {"checkpoint": <number>}`)
 	}
 
 	claim, err := h.svc.Claim(middleware.PlayerID(c), req.Checkpoint)
 	switch {
 	case errors.Is(err, service.ErrCheckpointUnknown):
-		respondError(c, http.StatusBadRequest, "CHECKPOINT_UNKNOWN", "checkpoint must be one of 5000, 7500, 10000")
+		return respondError(c, fiber.StatusBadRequest, "CHECKPOINT_UNKNOWN", "checkpoint must be one of 5000, 7500, 10000")
 	case errors.Is(err, service.ErrCheckpointNotReached):
-		respondError(c, http.StatusConflict, "CHECKPOINT_NOT_REACHED", "not enough points for this checkpoint")
+		return respondError(c, fiber.StatusConflict, "CHECKPOINT_NOT_REACHED", "not enough points for this checkpoint")
 	case errors.Is(err, service.ErrAlreadyClaimed):
-		respondError(c, http.StatusConflict, "ALREADY_CLAIMED", "this checkpoint's reward was already claimed")
+		return respondError(c, fiber.StatusConflict, "ALREADY_CLAIMED", "this checkpoint's reward was already claimed")
 	case err != nil:
-		internalError(c)
+		return internalError(c)
 	default:
-		c.JSON(http.StatusOK, claim)
+		return c.JSON(claim)
 	}
 }
 
-func (h *Handler) playHistory(c *gin.Context) {
+func (h *Handler) playHistory(c *fiber.Ctx) error {
 	plays, err := h.svc.PlayHistory(middleware.PlayerID(c))
 	if err != nil {
-		internalError(c)
-		return
+		return internalError(c)
 	}
-	c.JSON(http.StatusOK, gin.H{"items": plays})
+	return c.JSON(fiber.Map{"items": plays})
 }
 
-func (h *Handler) claimHistory(c *gin.Context) {
+func (h *Handler) claimHistory(c *fiber.Ctx) error {
 	claims, err := h.svc.ClaimHistory(middleware.PlayerID(c))
 	if err != nil {
-		internalError(c)
-		return
+		return internalError(c)
 	}
-	c.JSON(http.StatusOK, gin.H{"items": claims})
+	return c.JSON(fiber.Map{"items": claims})
 }
 
-func (h *Handler) reset(c *gin.Context) {
+func (h *Handler) reset(c *fiber.Ctx) error {
 	if err := h.svc.Reset(middleware.PlayerID(c)); err != nil {
-		internalError(c)
-		return
+		return internalError(c)
 	}
-	c.Status(http.StatusNoContent)
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func respondError(c *gin.Context, status int, code, message string) {
-	c.AbortWithStatusJSON(status, gin.H{
-		"error": gin.H{"code": code, "message": message},
+func respondError(c *fiber.Ctx, status int, code, message string) error {
+	return c.Status(status).JSON(fiber.Map{
+		"error": fiber.Map{"code": code, "message": message},
 	})
 }
 
-func internalError(c *gin.Context) {
-	respondError(c, http.StatusInternalServerError, "INTERNAL", "internal server error")
+func internalError(c *fiber.Ctx) error {
+	return respondError(c, fiber.StatusInternalServerError, "INTERNAL", "internal server error")
 }

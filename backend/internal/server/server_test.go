@@ -1,31 +1,29 @@
-package middleware_test
+package server_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/middleware"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/config"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/server"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/testutil"
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-func testRouter(db *gorm.DB) *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	api := r.Group("/", middleware.EnsurePlayer(db, false))
-	api.GET("/whoami", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"playerId": middleware.PlayerID(c).String()})
+func testApp(db *gorm.DB) *fiber.App {
+	return server.New(db, config.Config{
+		FrontendOrigin: "http://localhost:3000",
+		CookieSecure:   false,
 	})
-	return r
 }
 
-func playerCookie(t *testing.T, res *httptest.ResponseRecorder) *http.Cookie {
+func playerCookie(t *testing.T, res *http.Response) *http.Cookie {
 	t.Helper()
-	for _, ck := range res.Result().Cookies() {
+	for _, ck := range res.Cookies() {
 		if ck.Name == "player_id" {
 			return ck
 		}
@@ -41,13 +39,14 @@ func cleanupPlayer(t *testing.T, db *gorm.DB, id string) {
 
 func TestEnsurePlayer_BootstrapsNewPlayer(t *testing.T) {
 	db := testutil.DB(t)
-	r := testRouter(db)
+	app := testApp(db)
 
-	res := httptest.NewRecorder()
-	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/whoami", nil))
-
-	if res.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", res.Code)
+	res, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/me", nil), -1)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
 	}
 	ck := playerCookie(t, res)
 	if ck == nil {
@@ -67,23 +66,27 @@ func TestEnsurePlayer_BootstrapsNewPlayer(t *testing.T) {
 
 func TestEnsurePlayer_ReusesExistingPlayer(t *testing.T) {
 	db := testutil.DB(t)
-	r := testRouter(db)
+	app := testApp(db)
 
-	first := httptest.NewRecorder()
-	r.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/whoami", nil))
+	first, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/me", nil), -1)
+	if err != nil {
+		t.Fatalf("first request: %v", err)
+	}
 	ck := playerCookie(t, first)
 	if ck == nil {
 		t.Fatal("expected player_id cookie on first request")
 	}
 	cleanupPlayer(t, db, ck.Value)
 
-	second := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/whoami", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
 	req.AddCookie(&http.Cookie{Name: "player_id", Value: ck.Value})
-	r.ServeHTTP(second, req)
+	second, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("second request: %v", err)
+	}
 
-	if second.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", second.Code)
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", second.StatusCode)
 	}
 	if playerCookie(t, second) != nil {
 		t.Error("existing player should not get a new cookie")
@@ -92,16 +95,18 @@ func TestEnsurePlayer_ReusesExistingPlayer(t *testing.T) {
 
 func TestEnsurePlayer_TamperedCookieGetsFreshPlayer(t *testing.T) {
 	db := testutil.DB(t)
-	r := testRouter(db)
+	app := testApp(db)
 
 	fake := uuid.NewString() // valid UUID but no matching player row
-	res := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/whoami", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
 	req.AddCookie(&http.Cookie{Name: "player_id", Value: fake})
-	r.ServeHTTP(res, req)
+	res, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
 
-	if res.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", res.Code)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
 	}
 	ck := playerCookie(t, res)
 	if ck == nil {
