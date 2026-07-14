@@ -3,12 +3,14 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/config"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/database"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/handler"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/middleware"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/service"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,6 +30,15 @@ func main() {
 	if err := r.SetTrustedProxies(nil); err != nil {
 		log.Fatalf("set trusted proxies: %v", err)
 	}
+
+	// Cookie auth across origins: only the known frontend may send credentials.
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{cfg.FrontendOrigin},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodOptions},
+		AllowHeaders:     []string{"Content-Type"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

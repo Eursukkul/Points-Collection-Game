@@ -112,3 +112,38 @@ func TestPlay_RandomScoreMembership(t *testing.T) {
 		t.Errorf("stored points = %d, want clamped %d", stored.Points, checkpoint.MaxPoints)
 	}
 }
+
+func TestPlay_ConcurrentPlaysSerialize(t *testing.T) {
+	db := testutil.DB(t)
+	svc := New(db)
+	svc.randScore = fixedScore(300)
+	player := testutil.NewPlayer(t, db, 0)
+
+	const rounds = 10
+	errs := make(chan error, rounds)
+	for i := 0; i < rounds; i++ {
+		go func() {
+			_, err := svc.Play(player.ID)
+			errs <- err
+		}()
+	}
+	for i := 0; i < rounds; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent Play: %v", err)
+		}
+	}
+
+	// Without SELECT ... FOR UPDATE, racing read-modify-writes would lose updates.
+	var stored model.Player
+	if err := db.First(&stored, "id = ?", player.ID).Error; err != nil {
+		t.Fatalf("reload player: %v", err)
+	}
+	if want := rounds * 300; stored.Points != want {
+		t.Errorf("points = %d, want %d (lost updates)", stored.Points, want)
+	}
+	var plays int64
+	db.Model(&model.Play{}).Where("player_id = ?", player.ID).Count(&plays)
+	if plays != rounds {
+		t.Errorf("play rows = %d, want %d", plays, rounds)
+	}
+}

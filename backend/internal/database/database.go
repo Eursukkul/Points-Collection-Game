@@ -10,7 +10,9 @@ import (
 
 // Connect opens a Postgres connection and verifies it with a ping.
 func Connect(databaseURL string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	// TranslateError maps driver errors to gorm sentinels (e.g. unique
+	// violations → gorm.ErrDuplicatedKey) so services don't import pgconn.
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{TranslateError: true})
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
