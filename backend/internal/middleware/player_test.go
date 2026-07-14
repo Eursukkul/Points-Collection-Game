@@ -3,32 +3,15 @@ package middleware_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/database"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/middleware"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/testutil"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
-
-func testDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		url = "postgres://points:points_local@localhost:5432/points_game?sslmode=disable"
-	}
-	db, err := database.Connect(url)
-	if err != nil {
-		t.Skipf("postgres not available (run `docker compose up -d`): %v", err)
-	}
-	if err := database.Migrate(db); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
-}
 
 func testRouter(db *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -57,7 +40,7 @@ func cleanupPlayer(t *testing.T, db *gorm.DB, id string) {
 }
 
 func TestEnsurePlayer_BootstrapsNewPlayer(t *testing.T) {
-	db := testDB(t)
+	db := testutil.DB(t)
 	r := testRouter(db)
 
 	res := httptest.NewRecorder()
@@ -83,7 +66,7 @@ func TestEnsurePlayer_BootstrapsNewPlayer(t *testing.T) {
 }
 
 func TestEnsurePlayer_ReusesExistingPlayer(t *testing.T) {
-	db := testDB(t)
+	db := testutil.DB(t)
 	r := testRouter(db)
 
 	first := httptest.NewRecorder()
@@ -108,7 +91,7 @@ func TestEnsurePlayer_ReusesExistingPlayer(t *testing.T) {
 }
 
 func TestEnsurePlayer_TamperedCookieGetsFreshPlayer(t *testing.T) {
-	db := testDB(t)
+	db := testutil.DB(t)
 	r := testRouter(db)
 
 	fake := uuid.NewString() // valid UUID but no matching player row

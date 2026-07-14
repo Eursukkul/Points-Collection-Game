@@ -1,0 +1,43 @@
+// Package testutil provides shared test helpers backed by the local
+// docker-compose Postgres — tests run against the real database engine.
+package testutil
+
+import (
+	"os"
+	"testing"
+
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/database"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
+	"gorm.io/gorm"
+)
+
+// DB connects to the test Postgres and ensures the schema is migrated.
+func DB(t *testing.T) *gorm.DB {
+	t.Helper()
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		url = "postgres://points:points_local@localhost:5432/points_game?sslmode=disable"
+	}
+	db, err := database.Connect(url)
+	if err != nil {
+		t.Skipf("postgres not available (run `docker compose up -d`): %v", err)
+	}
+	if err := database.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return db
+}
+
+// NewPlayer inserts a player with the given points; the row (and its plays and
+// claims, via ON DELETE CASCADE) is removed on test cleanup.
+func NewPlayer(t *testing.T, db *gorm.DB, points int) model.Player {
+	t.Helper()
+	p := model.Player{Points: points}
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Delete(&model.Player{}, "id = ?", p.ID)
+	})
+	return p
+}
