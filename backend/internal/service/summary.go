@@ -19,6 +19,19 @@ type Summary struct {
 	Checkpoints []CheckpointStatus `json:"checkpoints"`
 }
 
+// EmptySummary is the zero-state summary for a player that doesn't exist yet
+// (a fresh visitor with no cookie) — no database row is created.
+func EmptySummary() Summary {
+	statuses := make([]CheckpointStatus, 0, len(checkpoint.All))
+	for _, cp := range checkpoint.All {
+		statuses = append(statuses, CheckpointStatus{
+			Checkpoint: cp.Threshold,
+			RewardName: cp.RewardName,
+		})
+	}
+	return Summary{Points: 0, MaxPoints: checkpoint.MaxPoints, Checkpoints: statuses}
+}
+
 // Summary returns the player's points and per-checkpoint reached/claimed state.
 func (s *Service) Summary(playerID uuid.UUID) (Summary, error) {
 	var player model.Player

@@ -5,7 +5,15 @@ import (
 
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/testutil"
+	"github.com/google/uuid"
 )
+
+func seedPlay(t *testing.T, svc *Service, playerID uuid.UUID) {
+	t.Helper()
+	if _, err := svc.Play(playerID); err != nil {
+		t.Fatalf("seed play: %v", err)
+	}
+}
 
 func TestReset_WipesOnlyThisPlayer(t *testing.T) {
 	db := testutil.DB(t)
@@ -16,11 +24,9 @@ func TestReset_WipesOnlyThisPlayer(t *testing.T) {
 	other := testutil.NewPlayer(t, db, 0)
 
 	// player: 2 plays (6000 points) + 1 claim; other: 1 play (3000 points).
-	for _, id := range []model.Player{player, player, other} {
-		if _, err := svc.Play(id.ID); err != nil {
-			t.Fatalf("seed play: %v", err)
-		}
-	}
+	seedPlay(t, svc, player.ID)
+	seedPlay(t, svc, player.ID)
+	seedPlay(t, svc, other.ID)
 	if _, err := svc.Claim(player.ID, 5000); err != nil {
 		t.Fatalf("seed claim: %v", err)
 	}

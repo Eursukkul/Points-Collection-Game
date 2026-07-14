@@ -1,0 +1,234 @@
+openapi: 3.0.3
+info:
+  title: Points Collection Game API
+  version: 1.0.0
+  description: |
+    เกมสะสมคะแนน Nextzy — REST API สำหรับเกมสุ่มสะสมคะแนน
+
+    **Player identity**: ไม่มี login — ผู้เล่นถูกระบุด้วย httpOnly cookie `player_id`
+    ซึ่ง server สร้างให้อัตโนมัติที่ request แรก (client ปลอม cookie ที่ไม่ตรงกับ
+    player ใน database จะได้ player ใหม่แทน)
+
+    **Server-authoritative**: การสุ่มคะแนน, การ clamp เพดาน 10,000,
+    และการตรวจ checkpoint ทำฝั่ง server ทั้งหมด client ส่งได้แค่ intent
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      tags: [system]
+      responses:
+        "200":
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/me:
+    get:
+      summary: สรุปคะแนนสะสมและสถานะ checkpoint ของผู้เล่น
+      tags: [player]
+      responses:
+        "200":
+          description: Player summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+          headers:
+            Set-Cookie:
+              description: ตั้ง `player_id` cookie เมื่อเป็นผู้เล่นใหม่
+              schema:
+                type: string
+
+  /api/v1/game/play:
+    post:
+      summary: เล่นเกมสุ่มคะแนน 1 ครั้ง
+      description: |
+        Server สุ่มคะแนนจาก {300, 500, 1000, 3000} ด้วย crypto/rand
+        แล้วบวกเข้าคะแนนสะสม (clamp ที่ 10,000) — ที่เพดานแล้วยังเล่นได้
+        แต่ `pointsAdded` เป็น 0
+      tags: [game]
+      responses:
+        "200":
+          description: ผลการเล่น
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayResult"
+
+  /api/v1/claims:
+    post:
+      summary: รับรางวัลของ checkpoint ที่ไปถึงแล้ว
+      description: รับซ้ำ checkpoint เดิมไม่ได้ (unique ต่อ player+checkpoint)
+      tags: [rewards]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkpoint]
+              properties:
+                checkpoint:
+                  type: integer
+                  enum: [5000, 7500, 10000]
+                  example: 5000
+      responses:
+        "200":
+          description: รับรางวัลสำเร็จ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Claim"
+        "400":
+          description: body ไม่ถูกต้อง (`INVALID_INPUT`) หรือ checkpoint ไม่รู้จัก (`CHECKPOINT_UNKNOWN`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: คะแนนยังไม่ถึง (`CHECKPOINT_NOT_REACHED`) หรือรับไปแล้ว (`ALREADY_CLAIMED`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/history/plays:
+    get:
+      summary: ประวัติการเล่น (ล่าสุดก่อน, สูงสุด 50 รายการ)
+      tags: [history]
+      responses:
+        "200":
+          description: รายการประวัติการเล่น
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Play"
+
+  /api/v1/history/claims:
+    get:
+      summary: ประวัติรางวัลที่เคยได้รับ (ล่าสุดก่อน, สูงสุด 50 รายการ)
+      tags: [history]
+      responses:
+        "200":
+          description: รายการรางวัล
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Claim"
+
+  /api/v1/reset:
+    post:
+      summary: รีเซตข้อมูลผู้เล่น (สำหรับ tester)
+      description: ลบประวัติการเล่น รางวัลทั้งหมด และตั้งคะแนนเป็น 0 — เฉพาะผู้เล่นคนนี้
+      tags: [player]
+      responses:
+        "204":
+          description: รีเซตสำเร็จ
+
+components:
+  schemas:
+    Summary:
+      type: object
+      properties:
+        points:
+          type: integer
+          example: 4300
+        maxPoints:
+          type: integer
+          example: 10000
+        checkpoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckpointStatus"
+
+    CheckpointStatus:
+      type: object
+      properties:
+        checkpoint:
+          type: integer
+          example: 5000
+        rewardName:
+          type: string
+          example: รางวัล A
+        reached:
+          type: boolean
+        claimed:
+          type: boolean
+
+    PlayResult:
+      type: object
+      properties:
+        score:
+          type: integer
+          description: คะแนนที่สุ่มได้
+          example: 3000
+        pointsAdded:
+          type: integer
+          description: คะแนนที่บวกจริงหลัง clamp เพดาน
+          example: 200
+        totalPoints:
+          type: integer
+          example: 10000
+
+    Play:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        score:
+          type: integer
+          example: 1000
+        createdAt:
+          type: string
+          format: date-time
+
+    Claim:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        checkpoint:
+          type: integer
+          example: 5000
+        rewardName:
+          type: string
+          example: รางวัล A
+        createdAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: ALREADY_CLAIMED
+            message:
+              type: string
+              example: this checkpoint's reward was already claimed

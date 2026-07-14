@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/apierr"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -16,10 +17,14 @@ const (
 	cookieMaxAge = 365 * 24 * time.Hour
 )
 
-// EnsurePlayer identifies the player from an httpOnly cookie, bootstrapping a
-// new player (and setting the cookie) when the cookie is missing or invalid.
+// EnsurePlayer identifies the player from an httpOnly cookie. On a state-changing
+// request without a valid player it bootstraps one (and sets the cookie); on a
+// safe (read-only) request it does NOT create a row — that would let cookieless
+// traffic (bots, uptime probes) grow the players table without bound. Read
+// handlers treat a nil player as empty state.
+//
 // The player ID is server-generated only — a tampered cookie that doesn't match
-// an existing player row gets a fresh player instead.
+// an existing player row is ignored.
 func EnsurePlayer(db *gorm.DB, secureCookie bool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if raw := c.Cookies(cookieName); raw != "" {
@@ -31,14 +36,19 @@ func EnsurePlayer(db *gorm.DB, secureCookie bool) fiber.Handler {
 					c.Locals(ctxPlayerKey, id)
 					return c.Next()
 				case !errors.Is(err, gorm.ErrRecordNotFound):
-					return internalError(c)
+					return apierr.Internal(c)
 				}
 			}
 		}
 
+		if isSafeMethod(c.Method()) {
+			c.Locals(ctxPlayerKey, uuid.Nil)
+			return c.Next()
+		}
+
 		player := model.Player{}
 		if err := db.Create(&player).Error; err != nil {
-			return internalError(c)
+			return apierr.Internal(c)
 		}
 		setPlayerCookie(c, player.ID, secureCookie)
 		c.Locals(ctxPlayerKey, player.ID)
@@ -46,9 +56,15 @@ func EnsurePlayer(db *gorm.DB, secureCookie bool) fiber.Handler {
 	}
 }
 
-// PlayerID returns the authenticated player's ID set by EnsurePlayer.
+// PlayerID returns the player's ID set by EnsurePlayer, or uuid.Nil when a safe
+// request arrived without a valid player cookie.
 func PlayerID(c *fiber.Ctx) uuid.UUID {
-	return c.Locals(ctxPlayerKey).(uuid.UUID)
+	id, _ := c.Locals(ctxPlayerKey).(uuid.UUID)
+	return id
+}
+
+func isSafeMethod(method string) bool {
+	return method == fiber.MethodGet || method == fiber.MethodHead || method == fiber.MethodOptions
 }
 
 func setPlayerCookie(c *fiber.Ctx, id uuid.UUID, secure bool) {
@@ -66,11 +82,5 @@ func setPlayerCookie(c *fiber.Ctx, id uuid.UUID, secure bool) {
 		HTTPOnly: true,
 		Secure:   secure,
 		SameSite: sameSite,
-	})
-}
-
-func internalError(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-		"error": fiber.Map{"code": "INTERNAL", "message": "internal server error"},
 	})
 }

@@ -41,7 +41,8 @@ func TestEnsurePlayer_BootstrapsNewPlayer(t *testing.T) {
 	db := testutil.DB(t)
 	app := testApp(db)
 
-	res, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/me", nil), -1)
+	// A state-changing request bootstraps the player (safe GETs do not).
+	res, err := app.Test(httptest.NewRequest(http.MethodPost, "/api/v1/game/play", nil), -1)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -64,11 +65,37 @@ func TestEnsurePlayer_BootstrapsNewPlayer(t *testing.T) {
 	}
 }
 
+func TestGetMe_NoCookieReturnsEmptyWithoutCreating(t *testing.T) {
+	db := testutil.DB(t)
+	app := testApp(db)
+
+	var before int64
+	db.Model(&model.Player{}).Count(&before)
+
+	res, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/me", nil), -1)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	if playerCookie(t, res) != nil {
+		t.Error("a read-only request must not set a player cookie")
+	}
+
+	// No player row should have been created by the read.
+	var after int64
+	db.Model(&model.Player{}).Count(&after)
+	if after != before {
+		t.Errorf("player count changed %d → %d; GET must not create a player", before, after)
+	}
+}
+
 func TestEnsurePlayer_ReusesExistingPlayer(t *testing.T) {
 	db := testutil.DB(t)
 	app := testApp(db)
 
-	first, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/me", nil), -1)
+	first, err := app.Test(httptest.NewRequest(http.MethodPost, "/api/v1/game/play", nil), -1)
 	if err != nil {
 		t.Fatalf("first request: %v", err)
 	}
@@ -98,7 +125,7 @@ func TestEnsurePlayer_TamperedCookieGetsFreshPlayer(t *testing.T) {
 	app := testApp(db)
 
 	fake := uuid.NewString() // valid UUID but no matching player row
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/game/play", nil)
 	req.AddCookie(&http.Cookie{Name: "player_id", Value: fake})
 	res, err := app.Test(req, -1)
 	if err != nil {
@@ -115,5 +142,48 @@ func TestEnsurePlayer_TamperedCookieGetsFreshPlayer(t *testing.T) {
 	cleanupPlayer(t, db, ck.Value)
 	if ck.Value == fake {
 		t.Error("must not adopt the tampered player ID")
+	}
+}
+
+func TestCSRFGuard_RejectsCrossOriginStateChange(t *testing.T) {
+	db := testutil.DB(t)
+	app := testApp(db)
+
+	var before int64
+	db.Model(&model.Player{}).Count(&before)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/reset", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	res, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", res.StatusCode)
+	}
+	// Rejection must happen before EnsurePlayer, so no player row is created.
+	var after int64
+	db.Model(&model.Player{}).Count(&after)
+	if after != before {
+		t.Errorf("player count changed %d → %d; rejected request must not create a player", before, after)
+	}
+}
+
+func TestCSRFGuard_AllowsAllowedOrigin(t *testing.T) {
+	db := testutil.DB(t)
+	app := testApp(db)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/game/play", nil)
+	req.Header.Set("Origin", "http://localhost:3000")
+	res, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	if ck := playerCookie(t, res); ck != nil {
+		cleanupPlayer(t, db, ck.Value)
 	}
 }
