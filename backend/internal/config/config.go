@@ -6,6 +6,7 @@ type Config struct {
 	DatabaseURL    string
 	Port           string
 	FrontendOrigin string
+	CookieSecure   bool
 }
 
 // Load reads configuration from environment variables.
@@ -16,6 +17,7 @@ func Load() Config {
 		DatabaseURL:    getEnv("DATABASE_URL", "postgres://points:points_local@localhost:5432/points_game?sslmode=disable"),
 		Port:           getEnv("PORT", "8080"),
 		FrontendOrigin: getEnv("FRONTEND_ORIGIN", "http://localhost:3000"),
+		CookieSecure:   getEnv("COOKIE_SECURE", "false") == "true",
 	}
 }
 
