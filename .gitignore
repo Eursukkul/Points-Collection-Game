@@ -21,3 +21,6 @@ backend/tmp/
 .serena/
 .DS_Store
 *.log
+
+.claude
+.playwright-mcp

@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* Design tokens sampled from the Nextzy Figma. Light-only, mobile-first
+   (300–500px) design, so no dark-mode variants. */
+@theme {
+  --color-page: #f5f5f5;
+  --color-surface: #ffffff;
+
+  --color-primary: #ffc124; /* yellow — primary CTA (ไปเล่นเกม / ตกลง) */
+  --color-primary-strong: #f0a800;
+  --color-danger: #ff2428; /* red — สุ่มคะแนน */
+  --color-reset: #1e00ff; /* indigo — RESET pill */
+
+  --color-score: #1ae3d6; /* teal — score cards */
+  --color-win: #10a96d; /* green — winning card */
+  --color-cream: #f7e8d7; /* game panel background */
+  --color-gold: #ffcc29; /* coin / reward icon */
+  --color-accent: #f5811f; /* orange — accumulated-score number */
+
+  --color-ink: #1f2430;
+  --color-muted: #8a8f99;
+
+  --font-sans: var(--font-thai), ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-page);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
