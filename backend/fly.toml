@@ -1,0 +1,30 @@
+# Fly.io config for the backend. Deploy from this directory with `fly deploy`.
+# App name must be globally unique — change if `fly apps create` reports a clash.
+app = "nextzy-points-game"
+primary_region = "sin" # Singapore — closest to Thailand
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Scale to zero when idle to stay in the free budget; Firecracker cold start
+  # is ~1–2s. Bump min_machines_running to 1 if you want zero cold start.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
