@@ -49,7 +49,7 @@ func (h *Handler) getMe(c *fiber.Ctx) error {
 	if id == uuid.Nil {
 		return c.JSON(toSummaryDTO(h.uc.EmptySummary()))
 	}
-	summary, err := h.uc.Summary(c.UserContext(), id)
+	summary, err := h.uc.Summary(c.Context(), id)
 	if err != nil {
 		return apierr.Internal(c)
 	}
@@ -57,7 +57,7 @@ func (h *Handler) getMe(c *fiber.Ctx) error {
 }
 
 func (h *Handler) play(c *fiber.Ctx) error {
-	result, err := h.uc.Play(c.UserContext(), middleware.PlayerID(c))
+	result, err := h.uc.Play(c.Context(), middleware.PlayerID(c))
 	if err != nil {
 		return apierr.Internal(c)
 	}
@@ -78,7 +78,7 @@ func (h *Handler) claim(c *fiber.Ctx) error {
 
 	// The use case is the sole authority on valid checkpoints; an out-of-range
 	// value (including 0) comes back as ErrCheckpointUnknown.
-	claim, err := h.uc.Claim(c.UserContext(), middleware.PlayerID(c), req.Checkpoint)
+	claim, err := h.uc.Claim(c.Context(), middleware.PlayerID(c), req.Checkpoint)
 	switch {
 	case errors.Is(err, domain.ErrCheckpointUnknown):
 		return apierr.Respond(c, fiber.StatusBadRequest, "CHECKPOINT_UNKNOWN", "checkpoint must be one of 5000, 7500, 10000")
@@ -98,7 +98,7 @@ func (h *Handler) playHistory(c *fiber.Ctx) error {
 	if id == uuid.Nil {
 		return c.JSON(fiber.Map{"items": []playDTO{}})
 	}
-	plays, err := h.uc.PlayHistory(c.UserContext(), id)
+	plays, err := h.uc.PlayHistory(c.Context(), id)
 	if err != nil {
 		return apierr.Internal(c)
 	}
@@ -110,7 +110,7 @@ func (h *Handler) claimHistory(c *fiber.Ctx) error {
 	if id == uuid.Nil {
 		return c.JSON(fiber.Map{"items": []claimDTO{}})
 	}
-	claims, err := h.uc.ClaimHistory(c.UserContext(), id)
+	claims, err := h.uc.ClaimHistory(c.Context(), id)
 	if err != nil {
 		return apierr.Internal(c)
 	}
@@ -118,7 +118,7 @@ func (h *Handler) claimHistory(c *fiber.Ctx) error {
 }
 
 func (h *Handler) reset(c *fiber.Ctx) error {
-	if err := h.uc.Reset(c.UserContext(), middleware.PlayerID(c)); err != nil {
+	if err := h.uc.Reset(c.Context(), middleware.PlayerID(c)); err != nil {
 		return apierr.Internal(c)
 	}
 	return c.SendStatus(fiber.StatusNoContent)

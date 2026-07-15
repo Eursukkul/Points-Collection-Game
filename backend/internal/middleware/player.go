@@ -31,7 +31,7 @@ func EnsurePlayer(resolver PlayerResolver, secureCookie bool) fiber.Handler {
 		cookieID, hasCookie := parseCookie(c.Cookies(cookieName))
 		allowCreate := !isSafeMethod(c.Method())
 
-		id, created, err := resolver.ResolvePlayer(c.UserContext(), cookieID, hasCookie, allowCreate)
+		id, created, err := resolver.ResolvePlayer(c.Context(), cookieID, hasCookie, allowCreate)
 		if err != nil {
 			return apierr.Internal(c)
 		}

@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"errors"
 
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/domain"
 	"github.com/google/uuid"
@@ -40,9 +39,8 @@ func (u *UseCase) Claim(ctx context.Context, playerID uuid.UUID, threshold int) 
 		claim = created
 		return nil
 	})
-	if err != nil && !errors.Is(err, domain.ErrCheckpointNotReached) && !errors.Is(err, domain.ErrAlreadyClaimed) {
-		return domain.Claim{}, err
-	}
+	// claim is the zero value on any error path (it is only assigned on success),
+	// so returning it directly is correct; the handler branches on err via errors.Is.
 	return claim, err
 }
 
