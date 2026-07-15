@@ -1,5 +1,4 @@
 # Fly.io config for the backend. Deploy from this directory with `fly deploy`.
-# App name must be globally unique — change if `fly apps create` reports a clash.
 app = "nextzy-points-game"
 primary_region = "sin" # Singapore — closest to Thailand
 
@@ -12,8 +11,6 @@ primary_region = "sin" # Singapore — closest to Thailand
 [http_service]
   internal_port = 8080
   force_https = true
-  # Scale to zero when idle to stay in the free budget; Firecracker cold start
-  # is ~1–2s. Bump min_machines_running to 1 if you want zero cold start.
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 0
