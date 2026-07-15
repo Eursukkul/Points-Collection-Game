@@ -4,18 +4,18 @@ import (
 	"log"
 
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/config"
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/database"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/repository"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/server"
 )
 
 func main() {
 	cfg := config.Load()
 
-	db, err := database.Connect(cfg.DatabaseURL)
+	db, err := repository.Connect(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("database: %v", err)
 	}
-	if err := database.Migrate(db); err != nil {
+	if err := repository.Migrate(db); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 

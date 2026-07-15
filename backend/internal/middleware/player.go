@@ -1,14 +1,12 @@
 package middleware
 
 import (
-	"errors"
+	"context"
 	"time"
 
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/apierr"
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 const (
@@ -17,41 +15,30 @@ const (
 	cookieMaxAge = 365 * 24 * time.Hour
 )
 
+// PlayerResolver maps a cookie to a player, creating one only when allowed.
+// Implemented by the use case (dependency inversion — middleware declares its need).
+type PlayerResolver interface {
+	ResolvePlayer(ctx context.Context, cookieID uuid.UUID, hasCookie, allowCreate bool) (uuid.UUID, bool, error)
+}
+
 // EnsurePlayer identifies the player from an httpOnly cookie. On a state-changing
 // request without a valid player it bootstraps one (and sets the cookie); on a
 // safe (read-only) request it does NOT create a row — that would let cookieless
-// traffic (bots, uptime probes) grow the players table without bound. Read
-// handlers treat a nil player as empty state.
-//
-// The player ID is server-generated only — a tampered cookie that doesn't match
-// an existing player row is ignored.
-func EnsurePlayer(db *gorm.DB, secureCookie bool) fiber.Handler {
+// traffic (bots, probes) grow the players table. Read handlers treat uuid.Nil
+// as empty state.
+func EnsurePlayer(resolver PlayerResolver, secureCookie bool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if raw := c.Cookies(cookieName); raw != "" {
-			if id, parseErr := uuid.Parse(raw); parseErr == nil {
-				var player model.Player
-				err := db.Select("id").First(&player, "id = ?", id).Error
-				switch {
-				case err == nil:
-					c.Locals(ctxPlayerKey, id)
-					return c.Next()
-				case !errors.Is(err, gorm.ErrRecordNotFound):
-					return apierr.Internal(c)
-				}
-			}
-		}
+		cookieID, hasCookie := parseCookie(c.Cookies(cookieName))
+		allowCreate := !isSafeMethod(c.Method())
 
-		if isSafeMethod(c.Method()) {
-			c.Locals(ctxPlayerKey, uuid.Nil)
-			return c.Next()
-		}
-
-		player := model.Player{}
-		if err := db.Create(&player).Error; err != nil {
+		id, created, err := resolver.ResolvePlayer(c.UserContext(), cookieID, hasCookie, allowCreate)
+		if err != nil {
 			return apierr.Internal(c)
 		}
-		setPlayerCookie(c, player.ID, secureCookie)
-		c.Locals(ctxPlayerKey, player.ID)
+		if created {
+			setPlayerCookie(c, id, secureCookie)
+		}
+		c.Locals(ctxPlayerKey, id)
 		return c.Next()
 	}
 }
@@ -61,6 +48,17 @@ func EnsurePlayer(db *gorm.DB, secureCookie bool) fiber.Handler {
 func PlayerID(c *fiber.Ctx) uuid.UUID {
 	id, _ := c.Locals(ctxPlayerKey).(uuid.UUID)
 	return id
+}
+
+func parseCookie(raw string) (uuid.UUID, bool) {
+	if raw == "" {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 func isSafeMethod(method string) bool {

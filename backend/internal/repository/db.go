@@ -1,21 +1,20 @@
-package database
+package repository
 
 import (
 	"fmt"
 	"time"
 
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/checkpoint"
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/domain"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 // Connect opens a Postgres connection, verifies it with a ping, and sizes the
-// pool for a small managed Postgres (e.g. Railway) so a burst of concurrent
-// requests can't exhaust the server's connection ceiling.
+// pool for a small managed Postgres so a burst of requests can't exhaust the
+// server's connection ceiling.
 func Connect(databaseURL string) (*gorm.DB, error) {
 	// TranslateError maps driver errors to gorm sentinels (e.g. unique
-	// violations → gorm.ErrDuplicatedKey) so services don't import pgconn.
+	// violations → gorm.ErrDuplicatedKey).
 	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{TranslateError: true})
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -36,16 +35,15 @@ func Connect(databaseURL string) (*gorm.DB, error) {
 }
 
 // Migrate creates/updates the schema and applies the points ceiling CHECK
-// constraint derived from checkpoint.MaxPoints. AutoMigrate can't alter an
-// existing CHECK, so it's dropped and re-added explicitly — keeping the ceiling
-// single-sourced and correct even when MaxPoints changes.
+// constraint derived from domain.MaxPoints (single source of truth). AutoMigrate
+// can't alter an existing CHECK, so it's dropped and re-added explicitly.
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&model.Player{}, &model.Play{}, &model.Claim{}); err != nil {
+	if err := db.AutoMigrate(&playerModel{}, &playModel{}, &claimModel{}); err != nil {
 		return err
 	}
 	return db.Exec(fmt.Sprintf(
 		`ALTER TABLE players
 		   DROP CONSTRAINT IF EXISTS chk_players_points,
 		   ADD CONSTRAINT chk_players_points CHECK (points >= 0 AND points <= %d)`,
-		checkpoint.MaxPoints)).Error
+		domain.MaxPoints)).Error
 }

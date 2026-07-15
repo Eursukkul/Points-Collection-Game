@@ -3,11 +3,12 @@
 package testutil
 
 import (
+	"context"
 	"os"
 	"testing"
 
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/database"
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/domain"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/repository"
 	"gorm.io/gorm"
 )
 
@@ -18,11 +19,11 @@ func DB(t *testing.T) *gorm.DB {
 	if url == "" {
 		url = "postgres://points:points_local@localhost:5432/points_game?sslmode=disable"
 	}
-	db, err := database.Connect(url)
+	db, err := repository.Connect(url)
 	if err != nil {
 		t.Skipf("postgres not available (run `docker compose up -d`): %v", err)
 	}
-	if err := database.Migrate(db); err != nil {
+	if err := repository.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
@@ -30,14 +31,20 @@ func DB(t *testing.T) *gorm.DB {
 
 // NewPlayer inserts a player with the given points; the row (and its plays and
 // claims, via ON DELETE CASCADE) is removed on test cleanup.
-func NewPlayer(t *testing.T, db *gorm.DB, points int) model.Player {
+func NewPlayer(t *testing.T, db *gorm.DB, points int) domain.Player {
 	t.Helper()
-	p := model.Player{Points: points}
-	if err := db.Create(&p).Error; err != nil {
+	repos := repository.NewRepositories(db)
+	ctx := context.Background()
+	p, err := repos.Player().Create(ctx)
+	if err != nil {
 		t.Fatalf("create player: %v", err)
 	}
+	if err := repos.Player().UpdatePoints(ctx, p.ID, points); err != nil {
+		t.Fatalf("set points: %v", err)
+	}
+	p.Points = points
 	t.Cleanup(func() {
-		db.Delete(&model.Player{}, "id = ?", p.ID)
+		db.Exec("DELETE FROM players WHERE id = ?", p.ID)
 	})
 	return p
 }

@@ -1,5 +1,5 @@
-// Package server assembles the Fiber app — middleware, routes, CORS — so
-// main and tests boot the identical stack.
+// Package server is the composition root — it wires repositories, the use case,
+// and HTTP adapters into a Fiber app so main and tests boot the identical stack.
 package server
 
 import (
@@ -8,7 +8,8 @@ import (
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/config"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/handler"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/middleware"
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/service"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/repository"
+	"github.com/Eursukkul/Points-Collection-Game/backend/internal/usecase"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -16,6 +17,12 @@ import (
 )
 
 func New(db *gorm.DB, cfg config.Config) *fiber.App {
+	uc := usecase.New(
+		repository.NewRepositories(db),
+		repository.NewTxManager(db),
+		repository.NewCryptoRandomizer(),
+	)
+
 	app := fiber.New(fiber.Config{AppName: "points-game"})
 
 	// Fiber's recover is opt-in (unlike gin.Default): without it a handler panic
@@ -36,11 +43,11 @@ func New(db *gorm.DB, cfg config.Config) *fiber.App {
 	})
 
 	api := app.Group("/api/v1")
-	// CSRFGuard must run before EnsurePlayer so a rejected cross-origin request
-	// never triggers player creation.
+	// CSRFGuard runs before EnsurePlayer so a rejected cross-origin request never
+	// triggers player creation.
 	api.Use(middleware.CSRFGuard(cfg.FrontendOrigin))
-	api.Use(middleware.EnsurePlayer(db, cfg.CookieSecure))
-	handler.New(service.New(db)).Register(api)
+	api.Use(middleware.EnsurePlayer(uc, cfg.CookieSecure))
+	handler.New(uc).Register(api)
 
 	return app
 }

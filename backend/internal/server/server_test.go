@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/config"
-	"github.com/Eursukkul/Points-Collection-Game/backend/internal/model"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/server"
 	"github.com/Eursukkul/Points-Collection-Game/backend/internal/testutil"
 	"github.com/gofiber/fiber/v2"
@@ -33,7 +32,7 @@ func playerCookie(t *testing.T, res *http.Response) *http.Cookie {
 
 func cleanupPlayer(t *testing.T, db *gorm.DB, id string) {
 	t.Cleanup(func() {
-		db.Delete(&model.Player{}, "id = ?", id)
+		db.Exec("DELETE FROM players WHERE id = ?", id)
 	})
 }
 
@@ -59,7 +58,7 @@ func TestEnsurePlayer_BootstrapsNewPlayer(t *testing.T) {
 	cleanupPlayer(t, db, ck.Value)
 
 	var count int64
-	db.Model(&model.Player{}).Where("id = ?", ck.Value).Count(&count)
+	db.Table("players").Where("id = ?", ck.Value).Count(&count)
 	if count != 1 {
 		t.Fatalf("player row count = %d, want 1", count)
 	}
@@ -70,7 +69,7 @@ func TestGetMe_NoCookieReturnsEmptyWithoutCreating(t *testing.T) {
 	app := testApp(db)
 
 	var before int64
-	db.Model(&model.Player{}).Count(&before)
+	db.Table("players").Count(&before)
 
 	res, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/me", nil), -1)
 	if err != nil {
@@ -85,7 +84,7 @@ func TestGetMe_NoCookieReturnsEmptyWithoutCreating(t *testing.T) {
 
 	// No player row should have been created by the read.
 	var after int64
-	db.Model(&model.Player{}).Count(&after)
+	db.Table("players").Count(&after)
 	if after != before {
 		t.Errorf("player count changed %d → %d; GET must not create a player", before, after)
 	}
@@ -150,7 +149,7 @@ func TestCSRFGuard_RejectsCrossOriginStateChange(t *testing.T) {
 	app := testApp(db)
 
 	var before int64
-	db.Model(&model.Player{}).Count(&before)
+	db.Table("players").Count(&before)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/reset", nil)
 	req.Header.Set("Origin", "https://evil.example")
@@ -164,7 +163,7 @@ func TestCSRFGuard_RejectsCrossOriginStateChange(t *testing.T) {
 	}
 	// Rejection must happen before EnsurePlayer, so no player row is created.
 	var after int64
-	db.Model(&model.Player{}).Count(&after)
+	db.Table("players").Count(&after)
 	if after != before {
 		t.Errorf("player count changed %d → %d; rejected request must not create a player", before, after)
 	}
