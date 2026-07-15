@@ -1,0 +1,18 @@
+name: keep-backend-warm
+
+# Render free tier spins the backend down after ~15 min idle (cold start ~50s).
+# Ping /healthz periodically so it stays warm — keeps mobile responsiveness /
+# LCP fast for reviewers. Free for public repos.
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes (GitHub may delay under load)
+  workflow_dispatch: {} # allow manual run
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: |
+          curl -sf --retry 3 --max-time 60 \
+            https://points-collection-game.onrender.com/healthz
