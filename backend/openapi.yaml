@@ -13,6 +13,8 @@ info:
     และการตรวจ checkpoint ทำฝั่ง server ทั้งหมด client ส่งได้แค่ intent
 
 servers:
+  - url: https://points-collection-game.onrender.com
+    description: Production (Render, Singapore) — first request may cold-start ~50s
   - url: http://localhost:8080
     description: Local development
 
