@@ -7,10 +7,23 @@
 | | URL |
 |---|---|
 | **เว็บไซต์ (Frontend)** | https://points-collection-game.vercel.app |
-| **API (Backend)** | https://points-collection-game.onrender.com |
+| **API Docs (ยิงทดสอบได้จริง)** | https://v106lst41g.apidog.io |
+| **API Base (Backend)** | https://points-collection-game.onrender.com |
 | **Health check** | https://points-collection-game.onrender.com/healthz |
 
-> ⚠️ **Cold start:** Backend รันบน Render free tier ที่ spin down หลัง idle ~15 นาที → **request แรกอาจใช้เวลา ~50 วินาที** จากนั้นจะเร็วปกติ (เปิด `/healthz` ทิ้งไว้สัก 1 ครั้งเพื่อ warm ก่อนใช้งาน)
+> ⚠️ **Cold start:** Backend รันบน Render free tier ที่ spin down หลัง idle ~15 นาที → **request แรกอาจใช้เวลา ~50 วินาที** จากนั้นจะเร็วปกติ มี GitHub Actions (`.github/workflows/keepalive.yml`) ping `/healthz` ทุก 10 นาทีเพื่อคง backend ให้อุ่น
+
+### Performance (PageSpeed Insights — mobile)
+
+| Metric | ผล |
+|---|---|
+| Performance | **95** |
+| First Contentful Paint | ~0.8–1.1s |
+| Largest Contentful Paint | ~1.8–3.0s |
+| Total Blocking Time | 20–50ms |
+| Cumulative Layout Shift | 0 |
+
+> Frontend เสิร์ฟจาก Vercel CDN (static prerender + self-hosted font) จึงเร็ว; LCP ขึ้นกับความเร็วของ backend ตอนโหลดข้อมูล จึงใช้ keepalive คง backend ให้อุ่น
 
 ## 🧱 Tech Stack
 
@@ -126,7 +139,7 @@ cd backend && go test ./...
 cd frontend && npm test
 ```
 
-ครอบคลุม logic สำคัญ: clamp เพดานคะแนน, gain 0 ที่เพดาน, สุ่มอยู่ในเซ็ต, รับรางวัล/ต่ำกว่า threshold/รับซ้ำ, reset ล้างเฉพาะผู้เล่นตัวเอง, concurrent play (FOR UPDATE), cookie bootstrap/tamper, CSRF, checkpoint derivation
+**ผล:** Backend 19/19 ผ่าน · Frontend 7/7 ผ่าน — ครอบคลุม logic สำคัญ: clamp เพดานคะแนน, gain 0 ที่เพดาน, สุ่มอยู่ในเซ็ต, รับรางวัล/ต่ำกว่า threshold/รับซ้ำ, reset ล้างเฉพาะผู้เล่นตัวเอง, concurrent play (FOR UPDATE), cookie bootstrap/tamper, CSRF, checkpoint derivation
 
 ## 📌 Documented Assumptions
 
@@ -140,5 +153,7 @@ cd frontend && npm test
 ## ☁️ Deployment
 
 - **Frontend → Vercel:** root directory = `frontend`, env `NEXT_PUBLIC_API_BASE_URL` = URL ของ backend
-- **Backend → Render:** Docker (root `backend/`), region Singapore, env `DATABASE_URL` + `FRONTEND_ORIGIN`
+- **Backend → Render:** Docker (root `backend/`), region Singapore, env `DATABASE_URL` + `FRONTEND_ORIGIN` (cookie `Secure`/`SameSite=None` derive จาก scheme https ของ `FRONTEND_ORIGIN` อัตโนมัติ)
 - **Database → Neon:** PostgreSQL free, region Singapore
+- **Keep-alive:** GitHub Actions ping `/healthz` ทุก 10 นาที (`.github/workflows/keepalive.yml`) กัน Render free spin down
+- **API docs:** generate จาก `backend/openapi.yaml` เผยแพร่บน Apidog (public, ยิงทดสอบ production ได้)
