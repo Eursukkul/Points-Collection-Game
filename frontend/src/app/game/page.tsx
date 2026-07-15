@@ -69,7 +69,7 @@ export default function GamePage() {
       <header className="text-center">
         <p className="text-sm text-muted">คะแนนสะสม</p>
         <p className="text-2xl font-bold text-accent">
-          {(summary?.points ?? 0).toLocaleString()}
+          {summary ? summary.points.toLocaleString() : "—"}
           <span className="text-base font-medium text-muted">
             /{(summary?.maxPoints ?? 10000).toLocaleString()}
           </span>

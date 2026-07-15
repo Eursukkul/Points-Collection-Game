@@ -1,4 +1,5 @@
 import type { Summary } from "@/lib/types";
+import { isClaimable } from "@/lib/progress";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "./ProgressBar";
 
@@ -40,7 +41,7 @@ export function ScoreCard({ summary, claimingCheckpoint, onClaim }: Props) {
               </div>
             );
           }
-          if (cp.reached) {
+          if (isClaimable(cp)) {
             return (
               <Button
                 key={cp.checkpoint}

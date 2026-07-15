@@ -1,4 +1,5 @@
 import type { CheckpointStatus } from "@/lib/types";
+import { progressPercent } from "@/lib/progress";
 import { Coin } from "@/components/ui/Coin";
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export function ProgressBar({ points, maxPoints, checkpoints }: Props) {
-  const pct = Math.min((points / maxPoints) * 100, 100);
+  const pct = progressPercent(points, maxPoints);
 
   return (
     <div className="px-2 pb-8 pt-4">
@@ -18,7 +19,7 @@ export function ProgressBar({ points, maxPoints, checkpoints }: Props) {
           style={{ width: `${pct}%` }}
         />
         {checkpoints.map((cp) => {
-          const left = (cp.checkpoint / maxPoints) * 100;
+          const left = progressPercent(cp.checkpoint, maxPoints);
           return (
             <div
               key={cp.checkpoint}
